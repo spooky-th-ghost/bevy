@@ -24,6 +24,7 @@ use bevy_core::Name;
 use bevy_ecs::entity::MapEntities;
 use bevy_ecs::prelude::*;
 use bevy_ecs::reflect::ReflectMapEntities;
+use bevy_hierarchy::HierarchyQueryExt;
 use bevy_math::{FloatExt, Quat, Vec3};
 use bevy_reflect::Reflect;
 use bevy_render::mesh::morph::MorphWeights;
@@ -1182,6 +1183,7 @@ impl Plugin for AnimationPlugin {
                     advance_animations,
                     animate_targets,
                     expire_completed_transitions,
+                    register_animation_players,
                 )
                     .chain()
                     .before(TransformSystem::TransformPropagate),
@@ -1233,6 +1235,64 @@ impl AnimationGraphEvaluator {
 
         self.weights.clear();
         self.weights.extend(iter::repeat(0.0).take(node_count));
+    }
+}
+
+fn register_animation_players(
+    mut commands: Commands,
+    mut root_query: Query<(Entity, &mut DescendantAnimationPlayers)>,
+    children_query: Query<&bevy_hierarchy::Children>,
+    animation_player_query: Query<Entity, Added<AnimationPlayer>>,
+) {
+    for (entity, mut descendant_players) in &mut root_query {
+        for child in children_query.iter_descendants(entity) {
+            if animation_player_query.contains(child) {
+                descendant_players.insert("Test".to_string(), child);
+                commands.entity(child).observe(observe_player_events);
+            }
+        }
+    }
+}
+
+///
+#[derive(Component)]
+pub struct DescendantAnimationPlayers {
+    map: HashMap<String, Entity>,
+}
+
+impl DescendantAnimationPlayers {
+    /// Adds a reference to a descendant [AnimationPlayer]
+    pub fn insert(&mut self, key: String, value: Entity) {
+        self.map.insert(key, value);
+    }
+    /// Get the entity of a descendant [AnimationPlayer] if it exists, else return [None]
+    pub fn get(&self, key: &str) -> Option<Entity> {
+        self.map.get(key).copied()
+    }
+}
+
+/// Event used to trigger playing and stopping animations on an [AnimationPlayer]
+#[derive(Event)]
+pub enum AnimationPlayerEvent {
+    /// Event variant to play the passed [graph::AnimationNodeIndex]
+    Play(AnimationNodeIndex),
+    /// Event variant to stop the passed [graph::AnimationNodeIndex]
+    Stop(AnimationNodeIndex),
+}
+
+fn observe_player_events(
+    trigger: Trigger<AnimationPlayerEvent>,
+    mut players_query: Query<&mut AnimationPlayer>,
+) {
+    if let Ok(mut player) = players_query.get_mut(trigger.entity()) {
+        match trigger.event() {
+            AnimationPlayerEvent::Play(index) => {
+                player.play(*index);
+            }
+            AnimationPlayerEvent::Stop(index) => {
+                player.stop(*index);
+            }
+        }
     }
 }
 

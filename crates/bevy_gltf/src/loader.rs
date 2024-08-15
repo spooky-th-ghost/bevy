@@ -249,6 +249,10 @@ async fn load_gltf<'a, 'b, 'c>(
         }
     }
 
+    for skin in gltf.skins() {
+        println!("Skin: {:?}", skin);
+    }
+
     #[cfg(feature = "bevy_animation")]
     let paths = {
         let mut paths = HashMap::<usize, (usize, Vec<Name>)>::new();
@@ -721,9 +725,10 @@ async fn load_gltf<'a, 'b, 'c>(
             // if it is, add the AnimationPlayer component
             for node in scene.nodes() {
                 if animation_roots.contains(&node.index()) {
-                    world
+                    let player_entity = world
                         .entity_mut(*node_index_to_entity_map.get(&node.index()).unwrap())
-                        .insert(bevy_animation::AnimationPlayer::default());
+                        .insert(bevy_animation::AnimationPlayer::default()).id();
+                    println!("Animation Player Original Entity: {:?}", player_entity);
                 }
             }
         }
